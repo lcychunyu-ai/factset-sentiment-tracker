@@ -486,14 +486,17 @@ let searchQuery = '';
 let stockSort = 'weight';
 const pinnedTickers = new Set();
 
-// ---------- date range filtering (anchored to the snapshot's latest date, not the browser clock) ----------
-const ALL_DATES = DATA.revisions.map(r => r.date);
-const MAX_DATE = ALL_DATES.reduce((a, b) => (a > b ? a : b));
-const MIN_DATE = ALL_DATES.reduce((a, b) => (a < b ? a : b));
-const ALL_SPAN_DAYS = Math.round((new Date(MAX_DATE) - new Date(MIN_DATE)) / 86400000) + 1;
-
-const RANGE_LABEL = { today: '今天', '7d': '近7天', '30d': '近30天', '90d': '近90天', all: `全部（${MIN_DATE.slice(5)}至今）` };
-const RANGE_DAYS = { today: 1, '7d': 7, '30d': 30, '90d': 90, all: ALL_SPAN_DAYS };
+// ---------- date range filtering (anchored to the loaded data's latest date, not the browser clock) ----------
+// 注意：這幾個變數依賴DATA，DATA是loadData()非同步載入的，不能在頂層當場算，要等init()裡資料到位後呼叫initDateGlobals()才賦值
+let ALL_DATES, MAX_DATE, MIN_DATE, ALL_SPAN_DAYS, RANGE_LABEL, RANGE_DAYS;
+function initDateGlobals() {
+  ALL_DATES = DATA.revisions.map(r => r.date);
+  MAX_DATE = ALL_DATES.reduce((a, b) => (a > b ? a : b));
+  MIN_DATE = ALL_DATES.reduce((a, b) => (a < b ? a : b));
+  ALL_SPAN_DAYS = Math.round((new Date(MAX_DATE) - new Date(MIN_DATE)) / 86400000) + 1;
+  RANGE_LABEL = { today: '今天', '7d': '近7天', '30d': '近30天', '90d': '近90天', all: `全部（${MIN_DATE.slice(5)}至今）` };
+  RANGE_DAYS = { today: 1, '7d': 7, '30d': 30, '90d': 90, all: ALL_SPAN_DAYS };
+}
 function windowRevisions(daysBack, offsetDays) {
   offsetDays = offsetDays || 0;
   const maxD = new Date(MAX_DATE + 'T00:00:00');
@@ -723,13 +726,18 @@ function renderHeat() {
 }
 
 // ---------- estimates lookup ----------
-const estByRevision = {};
-DATA.estimates.forEach(e => {
-  if (!estByRevision[e.revision_id]) estByRevision[e.revision_id] = [];
-  estByRevision[e.revision_id].push(e);
-});
-const revisionById = {};
-DATA.revisions.forEach(r => revisionById[r.id] = r);
+// 同樣依賴DATA，等init()呼叫buildLookups()才真正填值
+let estByRevision = {};
+let revisionById = {};
+function buildLookups() {
+  estByRevision = {};
+  DATA.estimates.forEach(e => {
+    if (!estByRevision[e.revision_id]) estByRevision[e.revision_id] = [];
+    estByRevision[e.revision_id].push(e);
+  });
+  revisionById = {};
+  DATA.revisions.forEach(r => revisionById[r.id] = r);
+}
 
 function fmtNum(v) {
   if (v === null || v === undefined) return '—';
@@ -1208,6 +1216,9 @@ async function init() {
   const errorEl = document.getElementById('error-banner');
   try {
     await loadData();
+    initDateGlobals();
+    buildLookups();
+    filterRange = '30d';
     loadingEl.style.display = 'none';
     document.getElementById('main-content').style.display = '';
     document.getElementById('updated-at').textContent = new Date().toLocaleString('zh-TW', { hour12: false });
