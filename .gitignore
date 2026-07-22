@@ -16,3 +16,6 @@ factset_data/*
 
 # 網站build產物(由 factset_dashboard_v2.html 樣板注入資料產生)，不是原始碼
 factset_dashboard_v2_built.html
+
+# ETF成分股原始抓取檔(可重新產生，非原始碼)
+factset_data_*.txt

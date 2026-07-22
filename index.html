@@ -190,7 +190,20 @@
   .stock-row .industry-tag { font-size: 11px; color: var(--ink-faint); width: 110px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .concept-chips { display: flex; gap: 4px; flex-shrink: 0; }
   .concept-chip { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 100px; background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); white-space: nowrap; }
-  .concept-chip.tier2 { background: var(--panel-3); color: var(--ink-dim); }
+  .concept-chip.value-chain { background: var(--panel-3); color: var(--ink-dim); }
+  .sort-select {
+    font-size: 12.5px; color: var(--ink); background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 6px 10px; font-family: inherit; cursor: pointer;
+  }
+  .sort-select:focus { outline: none; border-color: var(--accent); }
+  .concept-filter-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .concept-filter-chip {
+    font-size: 12px; font-weight: 600; padding: 5px 12px; border-radius: 100px; cursor: pointer;
+    background: var(--panel-2); color: var(--ink-dim); border: 1px solid var(--border);
+  }
+  .concept-filter-chip:hover { border-color: var(--accent); }
+  .concept-filter-chip.active { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); border-color: var(--accent); }
+  .reversal-badge { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 100px; background: var(--accent); color: var(--accent-ink); flex-shrink: 0; }
   .stock-row .spark { flex: 1; min-width: 80px; height: 34px; }
   .stock-row .counts { display: flex; gap: 6px; flex-shrink: 0; }
   .count-chip { font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 5px; }
@@ -411,13 +424,29 @@
       <div class="crumbs" id="crumbs"></div>
       <div class="sort-group">
         <span class="filter-group-label">排序</span>
-        <div class="pillset" id="sort-pills">
-          <button class="pill active" data-sort="weight">分析師權重</button>
-          <button class="pill" data-sort="count">修正次數</button>
-          <button class="pill" data-sort="magnitude">單筆修正幅度</button>
-        </div>
+        <select id="sort-select" class="sort-select">
+          <optgroup label="重要性">
+            <option value="weight">分析師權重</option>
+          </optgroup>
+          <optgroup label="動能">
+            <option value="count">修正次數</option>
+            <option value="recent">最新異動日期</option>
+          </optgroup>
+          <optgroup label="訊號強度">
+            <option value="avgTemp">平均情緒溫度</option>
+            <option value="magnitude">單筆最大修正幅度</option>
+          </optgroup>
+          <optgroup label="異常／機會">
+            <option value="reversal">反轉優先（跑票）</option>
+            <option value="divergence">分析師分歧度</option>
+          </optgroup>
+          <optgroup label="核心度" id="core-optgroup" style="display:none;">
+            <option value="conceptWeight">概念權重（篩選概念後可用）</option>
+          </optgroup>
+        </select>
       </div>
     </div>
+    <div class="concept-filter-row" id="concept-filter-row"></div>
     <div class="stock-list" id="stock-list"></div>
   </section>
 
@@ -470,7 +499,7 @@ async function loadData() {
 
   const heat = await sbFetch('v_industry_heat_1m', { select: '*' });
   const narrativeRows = await sbFetch('v_narrative_1m', { select: '*' });
-  const conceptMap = await sbFetch('concept_map', { select: 'ticker,concept,tier,weight,source' });
+  const conceptMap = await sbFetch('concept_map', { select: 'ticker,concept,dimension,weight,source' });
 
   DATA = { revisions, estimates, heat, narrative: narrativeRows[0] || null, conceptMap };
 }
@@ -482,6 +511,7 @@ const crumbsEl = document.getElementById('crumbs');
 const tooltipEl = document.getElementById('tooltip');
 
 let activeIndustry = null;
+let activeConcept = null;
 let openStockTicker = null;
 let filterRange = '30d';
 let filterDirection = 'all';
@@ -1044,7 +1074,7 @@ function computeStockRollups(filterIndustry) {
     if (!byTicker[r.ticker]) byTicker[r.ticker] = { ticker: r.ticker, company: r.company, industry: r.industry_canonical, events: [] };
     byTicker[r.ticker].events.push(r);
   });
-  const list = Object.values(byTicker).map(s => {
+  let list = Object.values(byTicker).map(s => {
     s.events.sort((a,b) => a.date.localeCompare(b.date));
     s.upCount = s.events.filter(e => e.direction === 'UP').length;
     s.downCount = s.events.filter(e => e.direction === 'DOWN').length;
@@ -1053,17 +1083,57 @@ function computeStockRollups(filterIndustry) {
       date: e.date.slice(5), value: Number(e.new_target), dir: e.direction
     }));
     s.totalAnalystWeight = s.events.reduce((sum,e) => sum + (Number(e.analyst_count)||0), 0);
-    s.maxMoveAbs = Math.max(...s.events.filter(e=>e.target_change_pct!=null).map(e=>Math.abs(Number(e.target_change_pct))), 0);
+    const tpEvents = s.events.filter(e => e.event_type === 'TARGET_PRICE');
+    const changes = tpEvents.filter(e=>e.target_change_pct!=null).map(e=>Number(e.target_change_pct));
+    s.maxMoveAbs = changes.length ? Math.max(...changes.map(Math.abs)) : 0;
+    s.avgTemp = changes.length ? changes.reduce((a,b)=>a+b,0)/changes.length : null;
+    const spreads = tpEvents.filter(e=>e.target_high!=null && e.target_low!=null && e.new_target)
+      .map(e => (Number(e.target_high)-Number(e.target_low))/Number(e.new_target)*100);
+    s.avgDivergence = spreads.length ? spreads.reduce((a,b)=>a+b,0)/spreads.length : null;
+    s.reversed = isReversal(s.ticker);
+    s.conceptWeight = activeConcept ? (conceptByTicker[s.ticker]||[]).find(c=>c.concept===activeConcept)?.weight ?? null : null;
     s.pinned = pinnedTickers.has(s.ticker);
     return s;
-  }).sort((a,b) => (b.pinned - a.pinned) || sortStockList(a, b));
+  });
+  if (activeConcept) list = list.filter(s => s.conceptWeight != null);
+  list.sort((a,b) => (b.pinned - a.pinned) || sortStockList(a, b));
   return list;
 }
 
+// 反轉(跑票)判斷：用該股全部歷史目標價事件(不受目前篩選器限制)，比較最新一筆跟前一筆的方向
+function isReversal(ticker) {
+  const tp = DATA.revisions.filter(r => r.ticker === ticker && r.event_type === 'TARGET_PRICE')
+    .sort((a,b) => a.date.localeCompare(b.date) || a.id - b.id);
+  if (tp.length < 2) return false;
+  return tp[tp.length-1].direction !== tp[tp.length-2].direction;
+}
+
 function sortStockList(a, b) {
-  if (stockSort === 'magnitude') return b.maxMoveAbs - a.maxMoveAbs;
-  if (stockSort === 'count') return b.events.length - a.events.length || b.totalAnalystWeight - a.totalAnalystWeight;
-  return b.totalAnalystWeight - a.totalAnalystWeight || b.events.length - a.events.length;
+  const nullsLast = (va, vb) => (va==null && vb==null) ? 0 : va==null ? 1 : vb==null ? -1 : null;
+  switch (stockSort) {
+    case 'magnitude':
+      return b.maxMoveAbs - a.maxMoveAbs;
+    case 'count':
+      return b.events.length - a.events.length || b.totalAnalystWeight - a.totalAnalystWeight;
+    case 'recent':
+      return b.latest.date.localeCompare(a.latest.date) || (b.latest.id - a.latest.id);
+    case 'avgTemp': {
+      const n = nullsLast(a.avgTemp, b.avgTemp); if (n !== null) return n;
+      return Math.abs(b.avgTemp) - Math.abs(a.avgTemp);
+    }
+    case 'reversal':
+      return (b.reversed - a.reversed) || (b.totalAnalystWeight - a.totalAnalystWeight);
+    case 'divergence': {
+      const n = nullsLast(a.avgDivergence, b.avgDivergence); if (n !== null) return n;
+      return b.avgDivergence - a.avgDivergence;
+    }
+    case 'conceptWeight': {
+      const n = nullsLast(a.conceptWeight, b.conceptWeight); if (n !== null) return n;
+      return b.conceptWeight - a.conceptWeight;
+    }
+    default:
+      return b.totalAnalystWeight - a.totalAnalystWeight || b.events.length - a.events.length;
+  }
 }
 
 // 股票清單的排名/是否出現，跟著上方時間篩選器走；但點開單一股票後看到的走勢圖/事件列表
@@ -1097,8 +1167,40 @@ function renderCrumbs() {
   });
 }
 
+function renderConceptFilter() {
+  const row = document.getElementById('concept-filter-row');
+  const concepts = [...new Set((DATA.conceptMap||[]).map(c => c.concept))];
+  if (!concepts.length) { row.innerHTML = ''; return; }
+  row.innerHTML = concepts.map(c =>
+    `<button class="concept-filter-chip${activeConcept===c?' active':''}" data-concept="${c}">${c}</button>`
+  ).join('') + (activeConcept ? `<button class="reset-btn" id="clear-concept">清除概念篩選</button>` : '');
+  row.querySelectorAll('.concept-filter-chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      activeConcept = activeConcept === btn.dataset.concept ? null : btn.dataset.concept;
+      updateCoreOptgroupVisibility();
+      renderStockList();
+    });
+  });
+  const clearBtn = document.getElementById('clear-concept');
+  if (clearBtn) clearBtn.addEventListener('click', () => {
+    activeConcept = null;
+    updateCoreOptgroupVisibility();
+    renderStockList();
+  });
+}
+
+function updateCoreOptgroupVisibility() {
+  const grp = document.getElementById('core-optgroup');
+  grp.style.display = activeConcept ? '' : 'none';
+  if (!activeConcept && stockSort === 'conceptWeight') {
+    stockSort = 'weight';
+    document.getElementById('sort-select').value = 'weight';
+  }
+}
+
 function renderStockList() {
   renderCrumbs();
+  renderConceptFilter();
   const list = computeStockRollups(activeIndustry);
   stockListEl.innerHTML = '';
   if (!list.length) {
@@ -1116,9 +1218,10 @@ function renderStockList() {
     card.innerHTML = `
       <div class="stock-row">
         <button class="pin-btn${s.pinned ? ' pinned' : ''}" title="${s.pinned ? '取消釘選' : '釘選常用股'}" data-ticker="${s.ticker}">${s.pinned ? '★' : '☆'}</button>
+        ${s.reversed ? `<span class="reversal-badge" title="最新一次目標價修正方向跟前一次相反">反轉</span>` : ''}
         <div class="id-block"><div class="name">${s.company}</div><div class="ticker mono">${s.ticker}</div></div>
         <div class="industry-tag">${s.industry || ''}</div>
-        <div class="concept-chips">${(conceptByTicker[s.ticker]||[]).map(c => `<span class="concept-chip${c.tier===2?' tier2':''}" title="來源:${c.source||''}">${c.concept}</span>`).join('')}</div>
+        <div class="concept-chips">${(conceptByTicker[s.ticker]||[]).map(c => `<span class="concept-chip${c.dimension==='value_chain'?' value-chain':''}" title="${c.dimension==='theme'?'主題曝險':'供應鏈位置'} · 來源:${c.source||''}${c.weight!=null?' · 權重'+c.weight.toFixed(1)+'%':''}">${c.concept}</span>`).join('')}</div>
         <div class="spark"></div>
         <div class="counts">
           ${s.upCount ? `<span class="count-chip up">↑${s.upCount}</span>` : ''}
@@ -1205,11 +1308,8 @@ document.getElementById('type-pills').addEventListener('click', (e) => {
   openStockTicker = null;
   renderStockList();
 });
-document.getElementById('sort-pills').addEventListener('click', (e) => {
-  const btn = e.target.closest('.pill');
-  if (!btn) return;
-  stockSort = btn.dataset.sort;
-  document.querySelectorAll('#sort-pills .pill').forEach(p => p.classList.toggle('active', p === btn));
+document.getElementById('sort-select').addEventListener('change', (e) => {
+  stockSort = e.target.value;
   renderStockList();
 });
 let searchDebounce;
