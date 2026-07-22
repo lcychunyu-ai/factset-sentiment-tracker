@@ -1,0 +1,18 @@
+__pycache__/
+*.pyc
+.DS_Store
+.Rhistory
+
+# 不屬於FactSet專案的個人資料/其他專案
+AI Agent Matthias/
+telegram_config.json
+macro-analysis-framework_SKILL.md
+mtd_ccc_backtest.py
+.claude/
+
+# factset_data/ 全部是可重新產生的資料產出(JSON/CSV/xlsx/HTML快照)，不進版控
+factset_data/*
+!factset_data/.gitkeep
+
+# 網站build產物(由 factset_dashboard_v2.html 樣板注入資料產生)，不是原始碼
+factset_dashboard_v2_built.html
