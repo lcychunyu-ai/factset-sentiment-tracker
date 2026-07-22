@@ -287,20 +287,6 @@
   .sentiment-grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 14px; }
   @media (max-width: 720px) { .sentiment-grid { grid-template-columns: 1fr; } }
   .sentiment-card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 18px 20px; }
-  .findings-note { font-size: 12px; color: var(--ink-faint); margin: -6px 0 14px; }
-  .findings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
-  .finding-card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; border-left: 3px solid var(--border); }
-  .finding-card.status-confirmed { border-left-color: var(--down); }
-  .finding-card.status-caveat { border-left-color: var(--accent); }
-  .finding-card.status-null { border-left-color: var(--ink-faint); }
-  .finding-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-  .finding-status { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 100px; text-transform: uppercase; letter-spacing: 0.03em; flex-shrink: 0; }
-  .status-confirmed .finding-status { background: var(--down-dim); color: var(--down); }
-  .status-caveat .finding-status { background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--accent); }
-  .status-null .finding-status { background: var(--panel-3); color: var(--ink-faint); }
-  .finding-title { font-size: 13.5px; font-weight: 700; color: var(--ink); }
-  .finding-stat { font-family: 'SF Mono', ui-monospace, monospace; font-size: 12px; color: var(--ink-dim); margin: 4px 0 8px; }
-  .finding-desc { font-size: 12.5px; color: var(--ink-dim); line-height: 1.55; }
   .rating-bar-track { display: flex; height: 22px; border-radius: 6px; overflow: hidden; margin: 12px 0 10px; background: var(--panel-2); }
   .rating-seg { height: 100%; }
   .rating-seg.bull { background: var(--up); }
@@ -438,23 +424,9 @@
       <div class="sort-group">
         <span class="filter-group-label">排序</span>
         <select id="sort-select" class="sort-select">
-          <optgroup label="重要性">
-            <option value="weight">分析師權重</option>
-          </optgroup>
-          <optgroup label="動能">
-            <option value="count">修正次數</option>
-            <option value="recent">最新異動日期</option>
-          </optgroup>
-          <optgroup label="訊號強度">
-            <option value="avgTemp">平均情緒溫度</option>
-            <option value="magnitude">單筆最大修正幅度</option>
-          </optgroup>
-          <optgroup label="異常／機會">
-            <option value="divergence">分析師分歧度</option>
-          </optgroup>
-          <optgroup label="核心度" id="core-optgroup" style="display:none;">
-            <option value="conceptWeight">概念權重（篩選概念後可用）</option>
-          </optgroup>
+          <option value="weight">分析師權重</option>
+          <option value="recent">最新異動日期</option>
+          <option value="divergence">分析師分歧度</option>
         </select>
       </div>
     </div>
@@ -462,48 +434,11 @@
     <div class="stock-list" id="stock-list"></div>
   </section>
 
-  <section id="findings-section">
-    <h2 class="section-label">研究發現 · 這個溫度計到底準不準</h2>
-    <div class="findings-note">用市場模型事件研究(扣大盤+產業beta，[-250,-30]估計窗，date-cluster標準誤)驗證，資料為2023-2026完整樣本，非即時工具，是固定的研究結論存檔——下次重跑資料規模變大可能更新，但方法固定。</div>
-    <div class="findings-grid">
-      <div class="finding-card status-confirmed">
-        <div class="finding-head"><span class="finding-status">已驗證</span><span class="finding-title">分析師整體是落後指標</span></div>
-        <div class="finding-stat">調升前5天+2.01%(t=10.93) · 調降前5天-1.00%(t=-5.47)</div>
-        <div class="finding-desc">目標價修正公告前，股價已經顯著同向變動——分析師是在確認已經發生的事，不是預測。這是整個研究裡最穩健的發現，扣大盤與產業beta後依然成立。</div>
-      </div>
-      <div class="finding-card status-caveat">
-        <div class="finding-head"><span class="finding-status">有條件成立</span><span class="finding-title">目標價調降後有延續下跌</span></div>
-        <div class="finding-stat">事件後20天-0.98%(t=-2.75) · 勝率42.6% · 盈虧比≈1.03</div>
-        <div class="finding-desc">統計上顯著，但勝率不到五成、贏輸幅度接近打平——多數時候調降後股價其實持平或反彈，是少數極端下跌事件把平均值拉低。可以當風險提示，不構成明確可交易的做空優勢。</div>
-      </div>
-      <div class="finding-card status-null">
-        <div class="finding-head"><span class="finding-status">未觀察到效果</span><span class="finding-title">目標價調升後無顯著延續</span></div>
-        <div class="finding-stat">事件後20天+0.01%(t=0.03)</div>
-        <div class="finding-desc">調升方向事件後幾乎沒有平均超額報酬，追高調升訊號本身沒有事後驗證支持。</div>
-      </div>
-      <div class="finding-card status-caveat">
-        <div class="finding-head"><span class="finding-status">較弱</span><span class="finding-title">EPS修正訊號比目標價修正弱</span></div>
-        <div class="finding-stat">EPS調升前5天t=6.04(vs目標價t=10.93) · EPS事件後全部不顯著</div>
-        <div class="finding-desc">公開喊目標價可能是分析師更慎重、擔負職業聲譽的動作；EPS估值調整較像例行模型維護，訊號強度明顯較弱。</div>
-      </div>
-      <div class="finding-card status-null">
-        <div class="finding-head"><span class="finding-status">已測試·無效</span><span class="finding-title">反轉（跑票）訊號無預測力</span></div>
-        <div class="finding-stat">48組門檻組合(連續次數2-5次 × 跨度15-60天 × 材料性1-5%)，事件後5/10/20天全部不顯著</div>
-        <div class="finding-desc">假說：分析師打破自己前段站穩趨勢的修正，可能比大眾轉向更早、更有領先性。完整校準測試後唯一出現的邊緣訊號仍是「事件前」而非「事件後」——反轉沒有逃脫落後指標的規律，已從即時監控介面移除，避免誤導成可操作訊號。</div>
-      </div>
-      <div class="finding-card status-null">
-        <div class="finding-head"><span class="finding-status">未複現</span><span class="finding-title">特定產業調升效果是小樣本假象</span></div>
-        <div class="finding-stat">電子零組件業調升+20天CAR：初版樣本+4.91%(t=2.53顯著) → 全樣本重跑+1.42%(t=1.80不顯著)</div>
-        <div class="finding-desc">資料修正前用被截斷的半年樣本測出的「顯著」結果，換成完整2023-2026全樣本後消失——提醒任何看起來漂亮的子群組結果，都要用全樣本重新檢驗才能信。</div>
-      </div>
-    </div>
-  </section>
-
   <footer>
     <b>方法說明</b> — 情緒分數 = 新目標價 / 舊目標價 − 1（修正幅度，非現價 upside）；溫度 = Σ(情緒分數 × 分析師數) / Σ(分析師數)。資料來源：鉅亨網「Factset 最新調查」公開新聞，涵蓋 tw_forecast 分類公開可得樣本，非 FactSet 完整母體。產業別採台灣證交所 / 櫃買中心官方分類。<br/>
     本頁即時連線資料庫，每次開啟自動讀取最新資料（僅顯示近90天，約一整季財報修正週期；更早歷史保留在資料庫供研究使用）；資料庫每日台灣時間07:00自動更新一次。目標價走勢圖以每篇文章回報之新目標價（含 EPS 快訊隨附之預估目標價）依時間排序繪製。<br/><br/>
-    <b>本工具的定位</b> — 這是「監控分析師共識變化」的儀表板，不是進場訊號產生器。已用市場模型事件研究驗證：分析師目標價/EPS修正**整體是落後指標**（修正前5天股價已顯著同向變動），溫度計的價值在於確認市場共識現在站在哪裡，不是預測轉折點。<br/>
-    唯一測出統計上顯著的事件後效應，是**目標價調降後的延續下跌**（事件後20天平均-0.98%，t=-2.75），但勝率僅42.6%、盈虧比接近1，不構成明確可交易的優勢，僅供風險提示參考；調升方向事件後無顯著延續效果。曾測試過「反轉（跑票）」訊號（分析師打破自己前段趨勢的修正）是否具領先性，結果同樣落後、無預測力，已從介面移除，不做誤導性呈現。
+    <b>本工具的定位</b> — 這是「監控分析師共識變化」的儀表板，不是進場訊號產生器。已用市場模型事件研究驗證：分析師目標價/EPS修正<b>整體是落後指標</b>（修正前5天股價已顯著同向變動），溫度計的價值在於確認市場共識現在站在哪裡，不是預測轉折點。<br/>
+    唯一測出統計上顯著的事件後效應，是<b>目標價調降後的延續下跌</b>（事件後20天平均-0.98%，t=-2.75），但勝率僅42.6%、盈虧比接近1，不構成明確可交易的優勢，僅供風險提示參考；調升方向事件後無顯著延續效果。曾測試過「反轉（跑票）」訊號（分析師打破自己前段趨勢的修正）是否具領先性，結果同樣落後、無預測力，已從介面移除，不做誤導性呈現。
   </footer>
   </div>
 </div>
@@ -1140,9 +1075,6 @@ function computeStockRollups(filterIndustry) {
     }));
     s.totalAnalystWeight = s.events.reduce((sum,e) => sum + (Number(e.analyst_count)||0), 0);
     const tpEvents = s.events.filter(e => e.event_type === 'TARGET_PRICE');
-    const changes = tpEvents.filter(e=>e.target_change_pct!=null).map(e=>Number(e.target_change_pct));
-    s.maxMoveAbs = changes.length ? Math.max(...changes.map(Math.abs)) : 0;
-    s.avgTemp = changes.length ? changes.reduce((a,b)=>a+b,0)/changes.length : null;
     const spreads = tpEvents.filter(e=>e.target_high!=null && e.target_low!=null && e.new_target)
       .map(e => (Number(e.target_high)-Number(e.target_low))/Number(e.new_target)*100);
     s.avgDivergence = spreads.length ? spreads.reduce((a,b)=>a+b,0)/spreads.length : null;
@@ -1158,23 +1090,11 @@ function computeStockRollups(filterIndustry) {
 function sortStockList(a, b) {
   const nullsLast = (va, vb) => (va==null && vb==null) ? 0 : va==null ? 1 : vb==null ? -1 : null;
   switch (stockSort) {
-    case 'magnitude':
-      return b.maxMoveAbs - a.maxMoveAbs;
-    case 'count':
-      return b.events.length - a.events.length || b.totalAnalystWeight - a.totalAnalystWeight;
     case 'recent':
       return b.latest.date.localeCompare(a.latest.date) || (b.latest.id - a.latest.id);
-    case 'avgTemp': {
-      const n = nullsLast(a.avgTemp, b.avgTemp); if (n !== null) return n;
-      return Math.abs(b.avgTemp) - Math.abs(a.avgTemp);
-    }
     case 'divergence': {
       const n = nullsLast(a.avgDivergence, b.avgDivergence); if (n !== null) return n;
       return b.avgDivergence - a.avgDivergence;
-    }
-    case 'conceptWeight': {
-      const n = nullsLast(a.conceptWeight, b.conceptWeight); if (n !== null) return n;
-      return b.conceptWeight - a.conceptWeight;
     }
     default:
       return b.totalAnalystWeight - a.totalAnalystWeight || b.events.length - a.events.length;
@@ -1222,25 +1142,14 @@ function renderConceptFilter() {
   row.querySelectorAll('.concept-filter-chip').forEach(btn => {
     btn.addEventListener('click', () => {
       activeConcept = activeConcept === btn.dataset.concept ? null : btn.dataset.concept;
-      updateCoreOptgroupVisibility();
       renderStockList();
     });
   });
   const clearBtn = document.getElementById('clear-concept');
   if (clearBtn) clearBtn.addEventListener('click', () => {
     activeConcept = null;
-    updateCoreOptgroupVisibility();
     renderStockList();
   });
-}
-
-function updateCoreOptgroupVisibility() {
-  const grp = document.getElementById('core-optgroup');
-  grp.style.display = activeConcept ? '' : 'none';
-  if (!activeConcept && stockSort === 'conceptWeight') {
-    stockSort = 'weight';
-    document.getElementById('sort-select').value = 'weight';
-  }
 }
 
 function renderStockList() {
