@@ -188,6 +188,9 @@
   .stock-row .id-block .name { font-weight: 700; font-size: 14.5px; }
   .stock-row .id-block .ticker { font-size: 11px; color: var(--ink-faint); }
   .stock-row .industry-tag { font-size: 11px; color: var(--ink-faint); width: 110px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .concept-chips { display: flex; gap: 4px; flex-shrink: 0; }
+  .concept-chip { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 100px; background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); white-space: nowrap; }
+  .concept-chip.tier2 { background: var(--panel-3); color: var(--ink-dim); }
   .stock-row .spark { flex: 1; min-width: 80px; height: 34px; }
   .stock-row .counts { display: flex; gap: 6px; flex-shrink: 0; }
   .count-chip { font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 5px; }
@@ -467,8 +470,9 @@ async function loadData() {
 
   const heat = await sbFetch('v_industry_heat_1m', { select: '*' });
   const narrativeRows = await sbFetch('v_narrative_1m', { select: '*' });
+  const conceptMap = await sbFetch('concept_map', { select: 'ticker,concept,tier,weight,source' });
 
-  DATA = { revisions, estimates, heat, narrative: narrativeRows[0] || null };
+  DATA = { revisions, estimates, heat, narrative: narrativeRows[0] || null, conceptMap };
 }
 const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
@@ -725,10 +729,11 @@ function renderHeat() {
   });
 }
 
-// ---------- estimates lookup ----------
+// ---------- estimates + concept lookup ----------
 // 同樣依賴DATA，等init()呼叫buildLookups()才真正填值
 let estByRevision = {};
 let revisionById = {};
+let conceptByTicker = {};
 function buildLookups() {
   estByRevision = {};
   DATA.estimates.forEach(e => {
@@ -737,6 +742,11 @@ function buildLookups() {
   });
   revisionById = {};
   DATA.revisions.forEach(r => revisionById[r.id] = r);
+  conceptByTicker = {};
+  (DATA.conceptMap || []).forEach(c => {
+    if (!conceptByTicker[c.ticker]) conceptByTicker[c.ticker] = [];
+    conceptByTicker[c.ticker].push(c);
+  });
 }
 
 function fmtNum(v) {
@@ -1108,6 +1118,7 @@ function renderStockList() {
         <button class="pin-btn${s.pinned ? ' pinned' : ''}" title="${s.pinned ? '取消釘選' : '釘選常用股'}" data-ticker="${s.ticker}">${s.pinned ? '★' : '☆'}</button>
         <div class="id-block"><div class="name">${s.company}</div><div class="ticker mono">${s.ticker}</div></div>
         <div class="industry-tag">${s.industry || ''}</div>
+        <div class="concept-chips">${(conceptByTicker[s.ticker]||[]).map(c => `<span class="concept-chip${c.tier===2?' tier2':''}" title="來源:${c.source||''}">${c.concept}</span>`).join('')}</div>
         <div class="spark"></div>
         <div class="counts">
           ${s.upCount ? `<span class="count-chip up">↑${s.upCount}</span>` : ''}
