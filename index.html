@@ -452,7 +452,7 @@
 
   <footer>
     <b>方法說明</b> — 情緒分數 = 新目標價 / 舊目標價 − 1（修正幅度，非現價 upside）；溫度 = Σ(情緒分數 × 分析師數) / Σ(分析師數)。資料來源：鉅亨網「Factset 最新調查」公開新聞，涵蓋 tw_forecast 分類公開可得樣本，非 FactSet 完整母體。產業別採台灣證交所 / 櫃買中心官方分類。<br/>
-    本頁即時連線資料庫，每次開啟自動讀取最新資料（僅顯示近200天，更早歷史保留在資料庫供研究使用）；資料庫每日台灣時間07:00自動更新一次。目標價走勢圖以每篇文章回報之新目標價（含 EPS 快訊隨附之預估目標價）依時間排序繪製。
+    本頁即時連線資料庫，每次開啟自動讀取最新資料（僅顯示近90天，約一整季財報修正週期；更早歷史保留在資料庫供研究使用）；資料庫每日台灣時間07:00自動更新一次。目標價走勢圖以每篇文章回報之新目標價（含 EPS 快訊隨附之預估目標價）依時間排序繪製。
   </footer>
   </div>
 </div>
@@ -464,7 +464,7 @@ let DATA = null;
 const SUPABASE_URL = 'https://kiiwaojcetxmeycyupvn.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtpaXdhb2pjZXR4bWV5Y3l1cHZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ1Mjk2NzAsImV4cCI6MjEwMDEwNTY3MH0.QPnEenJ8OtgWm1q3zhstinsAzXJAD6bunPp6JhrL4PU';
 const SB_HEADERS = { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` };
-const LIVE_FETCH_DAYS = 200; // 網站只拉最近200天資料(效能考量)，更早的歷史留在資料庫給研究用
+const LIVE_FETCH_DAYS = 90; // 網站只拉最近90天(約一季財報修正週期)，更早的歷史留在資料庫給研究用；研究/回測透過build_event_dataset.py另外抓完整歷史，不受此限制
 
 async function sbFetch(path, params) {
   const url = new URL(`${SUPABASE_URL}/rest/v1/${path}`);
@@ -530,6 +530,8 @@ function initDateGlobals() {
   ALL_SPAN_DAYS = Math.round((new Date(MAX_DATE) - new Date(MIN_DATE)) / 86400000) + 1;
   RANGE_LABEL = { today: '今天', '7d': '近7天', '30d': '近30天', '90d': '近90天', all: `全部（${MIN_DATE.slice(5)}至今）` };
   RANGE_DAYS = { today: 1, '7d': 7, '30d': 30, '90d': 90, all: ALL_SPAN_DAYS };
+  const allPill = document.querySelector('[data-range="all"]');
+  if (allPill) allPill.textContent = RANGE_LABEL.all;
 }
 function windowRevisions(daysBack, offsetDays) {
   offsetDays = offsetDays || 0;
