@@ -351,7 +351,6 @@
         <button class="pill" data-range="7d">近7天</button>
         <button class="pill active" data-range="30d">近30天</button>
         <button class="pill" data-range="90d">近90天</button>
-        <button class="pill" data-range="all">全部（1月至今）</button>
       </div>
     </div>
     <div class="filter-group">
@@ -529,10 +528,13 @@ function initDateGlobals() {
   MAX_DATE = ALL_DATES.reduce((a, b) => (a > b ? a : b));
   MIN_DATE = ALL_DATES.reduce((a, b) => (a < b ? a : b));
   ALL_SPAN_DAYS = Math.round((new Date(MAX_DATE) - new Date(MIN_DATE)) / 86400000) + 1;
-  RANGE_LABEL = { today: '今天', '7d': '近7天', '30d': '近30天', '90d': '近90天', all: `全部（${MIN_DATE.slice(5)}至今）` };
-  RANGE_DAYS = { today: 1, '7d': 7, '30d': 30, '90d': 90, all: ALL_SPAN_DAYS };
-  const allPill = document.querySelector('[data-range="all"]');
-  if (allPill) allPill.textContent = RANGE_LABEL.all;
+  // 「90d」正好等於網站抓取窗口(LIVE_FETCH_DAYS)，等同「全部可看到的資料」，
+  // 不需要再額外一個「全部」選項——見DATA_DICTIONARY.md版本記錄。
+  // RANGE_DAYS.90d用ALL_SPAN_DAYS(而非寫死90)，之後LIVE_FETCH_DAYS若調整也不用改這裡。
+  RANGE_LABEL = { today: '今天', '7d': '近7天', '30d': '近30天', '90d': `近${ALL_SPAN_DAYS}天（${MIN_DATE.slice(5)}至今）` };
+  RANGE_DAYS = { today: 1, '7d': 7, '30d': 30, '90d': ALL_SPAN_DAYS };
+  const outerPill = document.querySelector('[data-range="90d"]');
+  if (outerPill) outerPill.textContent = `近${ALL_SPAN_DAYS}天`;
 }
 function windowRevisions(daysBack, offsetDays) {
   offsetDays = offsetDays || 0;
