@@ -1,0 +1,26 @@
+name: Daily FactSet Update
+
+on:
+  schedule:
+    # 每天台灣時間早上7:00 (UTC 前一天 23:00)
+    - cron: "0 23 * * *"
+  workflow_dispatch: {}  # 允許手動觸發測試
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install requests beautifulsoup4
+
+      - name: Run daily update
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python3 daily_update.py --days 5
