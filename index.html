@@ -437,8 +437,8 @@
   <footer>
     <b>方法說明</b> — 情緒分數 = 新目標價 / 舊目標價 − 1（修正幅度，非現價 upside）；溫度 = Σ(情緒分數 × 分析師數) / Σ(分析師數)。資料來源：鉅亨網「Factset 最新調查」公開新聞，涵蓋 tw_forecast 分類公開可得樣本，非 FactSet 完整母體。產業別採台灣證交所 / 櫃買中心官方分類。<br/>
     本頁即時連線資料庫，每次開啟自動讀取最新資料（僅顯示近90天，約一整季財報修正週期；更早歷史保留在資料庫供研究使用）；資料庫每日台灣時間07:00自動更新一次。目標價走勢圖以每篇文章回報之新目標價（含 EPS 快訊隨附之預估目標價）依時間排序繪製。<br/><br/>
-    <b>本工具的定位</b> — 這是「監控分析師共識變化」的儀表板，不是進場訊號產生器。已用市場模型事件研究驗證：分析師目標價/EPS修正<b>整體是落後指標</b>（修正前5天股價已顯著同向變動），溫度計的價值在於確認市場共識現在站在哪裡，不是預測轉折點。<br/>
-    唯一測出統計上顯著的事件後效應，是<b>目標價調降後的延續下跌</b>（事件後20天平均-0.98%，t=-2.75），但勝率僅42.6%、盈虧比接近1，不構成明確可交易的優勢，僅供風險提示參考；調升方向事件後無顯著延續效果。曾測試過「反轉（跑票）」訊號（分析師打破自己前段趨勢的修正）是否具領先性，結果同樣落後、無預測力，已從介面移除，不做誤導性呈現。
+    <b>本工具的定位</b> — 這是「監控分析師共識變化」的儀表板，不是進場訊號產生器。已用市場模型事件研究驗證（樣本含目標價修正與EPS快訊內附之預估目標價，共5,650筆事件）：分析師目標價修正<b>整體是落後指標</b>（調升前5天股價已平均+1.42%，t=10.50；調降前5天平均-0.64%，t=-4.88），溫度計的價值在於確認市場共識現在站在哪裡，不是預測轉折點。<br/>
+    事件公告後(20天內)，目標價調升與調降<b>都沒有觀察到統計上顯著的延續效應</b>（調降t=-1.76、調升t=-1.27，均未達顯著），勝率也接近五成，不構成可交易的優勢。曾測試過「反轉（跑票）」訊號（分析師打破自己前段趨勢的修正）是否具領先性，結果同樣落後、無預測力，已從介面移除，不做誤導性呈現。
   </footer>
   </div>
 </div>
@@ -522,18 +522,24 @@ function initDateGlobals() {
   const outerPill = document.querySelector('[data-range="90d"]');
   if (outerPill) outerPill.textContent = `近${ALL_SPAN_DAYS}天`;
 }
-function windowRevisions(daysBack, offsetDays) {
+function windowRevisions(daysBack, offsetDays, source) {
   offsetDays = offsetDays || 0;
+  source = source || DATA.revisions;
   const maxD = new Date(MAX_DATE + 'T00:00:00');
   const end = new Date(maxD.getTime() - offsetDays * 86400000);
   const start = new Date(end.getTime() - (daysBack - 1) * 86400000);
-  return DATA.revisions.filter(r => {
+  return source.filter(r => {
     const d = new Date(r.date + 'T00:00:00');
     return d >= start && d <= end;
   });
 }
+function windowUnifiedEvents(daysBack, offsetDays) {
+  return windowRevisions(daysBack, offsetDays, unifiedTargetEvents);
+}
 function rangeFilteredRevisions() { return windowRevisions(RANGE_DAYS[filterRange], 0); }
 function previousWindowRevisions() { return windowRevisions(RANGE_DAYS[filterRange], RANGE_DAYS[filterRange]); }
+function rangeFilteredUnifiedEvents() { return windowUnifiedEvents(RANGE_DAYS[filterRange], 0); }
+function previousWindowUnifiedEvents() { return windowUnifiedEvents(RANGE_DAYS[filterRange], RANGE_DAYS[filterRange]); }
 function directionFiltered(list) {
   if (filterDirection === 'all') return list;
   return list.filter(r => r.direction === filterDirection);
@@ -543,29 +549,30 @@ function eventTypeFiltered(list) {
   return list.filter(r => r.event_type === filterEventType);
 }
 
-// ---------- temperature aggregation (mirrors the FSP.1M/FSN.1M SQL formula, client-side so filters can recompute it) ----------
-function computeTemps(revisions) {
+// ---------- temperature aggregation ----------
+// 用統一目標價序列(unifiedTargetEvents，見buildUnifiedTargetSeries)而非只認TARGET_PRICE事件，
+// 這樣EPS快訊內嵌的目標價更新也會被納入情緒溫度計算，不會漏掉65%沒有對應TARGET_PRICE報告的資訊。
+function computeTemps(unifiedEvents) {
   const groups = { UP: [], DOWN: [] };
-  revisions.forEach(r => {
-    if (r.event_type !== 'TARGET_PRICE' || r.old_target == null || Number(r.old_target) === 0) return;
+  unifiedEvents.forEach(r => {
+    if (r.direction !== 'UP' && r.direction !== 'DOWN') return;
     groups[r.direction].push(r);
   });
   function agg(list) {
     let sumW = 0, sumWeighted = 0;
     list.forEach(r => {
       const w = Number(r.analyst_count) || 0;
-      const score = Number(r.new_target) / Number(r.old_target) - 1;
-      sumWeighted += score * w; sumW += w;
+      sumWeighted += (r.target_change_pct / 100) * w; sumW += w;
     });
     return { count: list.length, weight: sumW, temp: sumW ? +(sumWeighted / sumW * 100).toFixed(2) : 0 };
   }
   return { up: agg(groups.UP), down: agg(groups.DOWN) };
 }
 
-function computeIndustryHeat(revisions) {
+function computeIndustryHeat(unifiedEvents) {
   const map = {};
-  revisions.forEach(r => {
-    if (r.event_type !== 'TARGET_PRICE' || r.old_target == null || Number(r.old_target) === 0 || !r.industry_canonical) return;
+  unifiedEvents.forEach(r => {
+    if ((r.direction !== 'UP' && r.direction !== 'DOWN') || !r.industry_canonical) return;
     if (!map[r.industry_canonical]) map[r.industry_canonical] = { UP: [], DOWN: [] };
     map[r.industry_canonical][r.direction].push(r);
   });
@@ -573,7 +580,7 @@ function computeIndustryHeat(revisions) {
     let sumW = 0, sumWeighted = 0;
     list.forEach(r => {
       const w = Number(r.analyst_count) || 0;
-      sumWeighted += (Number(r.new_target) / Number(r.old_target) - 1) * w; sumW += w;
+      sumWeighted += (r.target_change_pct / 100) * w; sumW += w;
     });
     return { count: list.length, weight: sumW, temp: sumW ? +(sumWeighted / sumW * 100).toFixed(2) : 0 };
   }
@@ -590,10 +597,10 @@ function fmtDelta(curr, prev, hasPrev) {
 // ---------- narrative + temp cards (recomputed on every filter change) ----------
 function renderNarrative() {
   const winRevisions = rangeFilteredRevisions();
-  const temps = computeTemps(winRevisions);
-  const prevTemps = computeTemps(previousWindowRevisions());
+  const temps = computeTemps(rangeFilteredUnifiedEvents());
+  const prevTemps = computeTemps(previousWindowUnifiedEvents());
   const hasPrev = prevTemps.up.count + prevTemps.down.count > 0;
-  const heatNow = computeIndustryHeat(winRevisions).sort((a,b) => b.up.weight - a.up.weight);
+  const heatNow = computeIndustryHeat(rangeFilteredUnifiedEvents()).sort((a,b) => b.up.weight - a.up.weight);
   const topInd = heatNow.find(h => h.up.weight > 0);
   const rangeLabel = RANGE_LABEL[filterRange];
 
@@ -696,8 +703,7 @@ function renderSentiment(winRevisions) {
 
 // ---------- industry heat (L1), recomputed on filter change ----------
 function renderHeat() {
-  const windowRevisions = rangeFilteredRevisions();
-  const heatNow = computeIndustryHeat(windowRevisions);
+  const heatNow = computeIndustryHeat(rangeFilteredUnifiedEvents());
   const single = filterDirection !== 'all';
   const dirKey = filterDirection === 'DOWN' ? 'down' : 'up';
 
@@ -755,6 +761,7 @@ function renderHeat() {
 let estByRevision = {};
 let revisionById = {};
 let conceptByTicker = {};
+let unifiedTargetEvents = [];
 function buildLookups() {
   estByRevision = {};
   DATA.estimates.forEach(e => {
@@ -768,6 +775,45 @@ function buildLookups() {
     if (!conceptByTicker[c.ticker]) conceptByTicker[c.ticker] = [];
     conceptByTicker[c.ticker].push(c);
   });
+  unifiedTargetEvents = buildUnifiedTargetSeries();
+}
+
+// 統一目標價序列(2026-07-23)：EPS快訊裡也帶預估目標價(new_target有值)，
+// 65%的EPS內嵌目標價前後7天內完全沒有TARGET_PRICE報告可對照，是被忽略的獨立資訊，
+// 只看event_type='TARGET_PRICE'會漏掉這些、也會讓序列跳動過快(見DATA_DICTIONARY.md)。
+// 這裡把兩種來源合併成每檔股票一條連續序列，用「上一個已知目標價觀測點」
+// (不論來源)重新算方向/幅度，取代原本只認TARGET_PRICE自帶direction/target_change_pct的做法。
+function buildUnifiedTargetSeries() {
+  const withTarget = DATA.revisions.filter(r => r.new_target != null);
+  // 同ticker+同date去重，優先TARGET_PRICE，其次analyst_count較高者
+  const bestByKey = {};
+  withTarget.forEach(r => {
+    const key = r.ticker + '_' + r.date;
+    const cur = bestByKey[key];
+    if (!cur) { bestByKey[key] = r; return; }
+    const score = x => (x.event_type === 'TARGET_PRICE' ? 1 : 0) * 1e9 + (Number(x.analyst_count) || 0);
+    if (score(r) > score(cur)) bestByKey[key] = r;
+  });
+  const byTicker = {};
+  Object.values(bestByKey).forEach(r => {
+    (byTicker[r.ticker] = byTicker[r.ticker] || []).push(r);
+  });
+  const unified = [];
+  Object.values(byTicker).forEach(evs => {
+    evs.sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
+    for (let i = 1; i < evs.length; i++) {
+      const prev = evs[i - 1], cur = evs[i];
+      if (!prev.new_target) continue;
+      const pct = (Number(cur.new_target) / Number(prev.new_target) - 1) * 100;
+      unified.push({
+        ...cur,
+        prev_target: prev.new_target,
+        direction: pct > 0 ? 'UP' : (pct < 0 ? 'DOWN' : 'FLAT'),
+        target_change_pct: pct,
+      });
+    }
+  });
+  return unified;
 }
 
 function fmtNum(v) {
