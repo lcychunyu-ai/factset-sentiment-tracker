@@ -174,15 +174,21 @@ def run_event_study(events_path, out_csv, out_issues, label):
 
 
 if __name__ == "__main__":
-    df_unified = run_event_study(
-        "factset_data/events_unified_target_full.json",
-        "factset_data/full_event_study_results.csv",
-        "factset_data/full_issues.json",
-        "①統一目標價序列版本(TARGET_PRICE + EPS內嵌目標價，新標準)",
-    )
     df_tp_only = run_event_study(
         "factset_data/events_target_price_full.json",
         "factset_data/full_event_study_results_tp_only.csv",
         "factset_data/full_issues_tp_only.json",
-        "②純TARGET_PRICE版本(舊版，僅供對照比較)",
+        "①純TARGET_PRICE版本(僅目標價修正報告)",
+    )
+    df_eps_only = run_event_study(
+        "factset_data/events_eps_only_target_full.json",
+        "factset_data/full_event_study_results_eps_only.csv",
+        "factset_data/full_issues_eps_only.json",
+        "②純EPS內嵌目標價版本(僅EPS快訊附帶的預估目標價)",
+    )
+    df_unified = run_event_study(
+        "factset_data/events_unified_target_full.json",
+        "factset_data/full_event_study_results.csv",
+        "factset_data/full_issues.json",
+        "③統一目標價序列版本(①+②合併，正式標準)",
     )
