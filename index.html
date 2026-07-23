@@ -437,8 +437,7 @@
   <footer>
     <b>方法說明</b> — 情緒分數 = 新目標價 / 舊目標價 − 1（修正幅度，非現價 upside）；溫度 = Σ(情緒分數 × 分析師數) / Σ(分析師數)。資料來源：鉅亨網「Factset 最新調查」公開新聞，涵蓋 tw_forecast 分類公開可得樣本，非 FactSet 完整母體。產業別採台灣證交所 / 櫃買中心官方分類。<br/>
     本頁即時連線資料庫，每次開啟自動讀取最新資料（僅顯示近90天，約一整季財報修正週期；更早歷史保留在資料庫供研究使用）；資料庫每日台灣時間07:00自動更新一次。目標價走勢圖以每篇文章回報之新目標價（含 EPS 快訊隨附之預估目標價）依時間排序繪製。<br/><br/>
-    <b>本工具的定位</b> — 這是「監控分析師共識變化」的儀表板，不是進場訊號產生器。已用市場模型事件研究驗證（樣本含目標價修正與EPS快訊內附之預估目標價，共5,650筆事件）：分析師目標價修正<b>整體是落後指標</b>（調升前5天股價已平均+1.42%，t=10.50；調降前5天平均-0.64%，t=-4.88），溫度計的價值在於確認市場共識現在站在哪裡，不是預測轉折點。<br/>
-    事件公告後(20天內)，目標價調升與調降<b>都沒有觀察到統計上顯著的延續效應</b>（調降t=-1.76、調升t=-1.27，均未達顯著），勝率也接近五成，不構成可交易的優勢。曾測試過「反轉（跑票）」訊號（分析師打破自己前段趨勢的修正）是否具領先性，結果同樣落後、無預測力，已從介面移除，不做誤導性呈現。
+    <div id="research-findings-text"></div>
   </footer>
   </div>
 </div>
@@ -486,8 +485,11 @@ async function loadData() {
   const heat = await sbFetch('v_industry_heat_1m', { select: '*' });
   const narrativeRows = await sbFetch('v_narrative_1m', { select: '*' });
   const conceptMap = await sbFetch('concept_map', { select: 'ticker,concept,dimension,weight,source' });
+  const researchStatsRows = await sbFetch('research_stats', { select: '*' });
+  const researchStats = {};
+  researchStatsRows.forEach(r => { researchStats[r.key] = r; });
 
-  DATA = { revisions, estimates, heat, narrative: narrativeRows[0] || null, conceptMap };
+  DATA = { revisions, estimates, heat, narrative: narrativeRows[0] || null, conceptMap, researchStats };
 }
 const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
@@ -1327,6 +1329,25 @@ document.getElementById('search-input').addEventListener('input', (e) => {
   }, 120);
 });
 
+// footer的研究結論數字全部從 research_stats 這張表抓，不寫死在HTML裡——
+// 每個數字都能在資料庫查到來源跟as_of_date，重跑event_study_full.py後
+// 更新那張表就好，不用改網頁文字，也不會出現網站顯示的數字資料庫查不到的情況。
+function renderResearchFindings() {
+  const s = DATA.researchStats || {};
+  const el = document.getElementById('research-findings-text');
+  if (!el || !s.unified_sample_n) { if (el) el.textContent = ''; return; }
+  const asOf = s.unified_sample_n.as_of_date;
+  const v = k => s[k] ? s[k].value : '—';
+  el.innerHTML =
+    `<b>本工具的定位</b> — 這是「監控分析師共識變化」的儀表板，不是進場訊號產生器。` +
+    `已用市場模型事件研究驗證（樣本含目標價修正與EPS快訊內附之預估目標價，共${v('unified_sample_n')}筆事件，資料截至${asOf}）：` +
+    `分析師目標價修正<b>整體是落後指標</b>（調升前5天股價已平均${v('up_pre5_mean_pct')}%，t=${v('up_pre5_t')}；` +
+    `調降前5天平均${v('down_pre5_mean_pct')}%，t=${v('down_pre5_t')}），溫度計的價值在於確認市場共識現在站在哪裡，不是預測轉折點。<br/>` +
+    `事件公告後(20天內)，目標價調升與調降<b>都沒有觀察到統計上顯著的延續效應</b>（調降t=${v('down_post20_t')}、調升t=${v('up_post20_t')}，均未達顯著），` +
+    `勝率也接近五成，不構成可交易的優勢。曾測試過「反轉（跑票）」訊號（分析師打破自己前段趨勢的修正）是否具領先性，結果同樣落後、無預測力，已從介面移除，不做誤導性呈現。` +
+    `<br/><span style="color:var(--ink-faint);font-size:11px;">研究結論來自資料庫 research_stats 表，非即時計算——重跑分析後才會更新</span>`;
+}
+
 async function init() {
   const loadingEl = document.getElementById('loading-banner');
   const errorEl = document.getElementById('error-banner');
@@ -1341,6 +1362,7 @@ async function init() {
     renderNarrative();
     renderHeat();
     renderStockList();
+    renderResearchFindings();
   } catch (err) {
     loadingEl.style.display = 'none';
     errorEl.style.display = '';

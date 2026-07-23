@@ -1,6 +1,6 @@
 # 資料字典
 
-資料庫本身(Supabase Table Editor)每個表/欄位都已經寫了`COMMENT`，滑鼠移過去就看得到——這份文件補充Table Editor放不下的東西：欄位之間的關聯、已知限制、正確用法。兩邊互補，不是重複。
+**下載資料前，先查`select * from v_data_dictionary`**——這是資料庫自己的說明文件，每張表、每個欄位的中文意思都在裡面(100%覆蓋，沒有欄位缺說明)，不用先讀這份文件才知道怎麼用。Supabase Table Editor滑鼠移到欄位上也看得到同樣的說明。這份`DATA_DICTIONARY.md`補的是`COMMENT`放不下的東西：欄位之間的關聯、已知限制、方法論的來龍去脈。
 
 ## 表結構
 
