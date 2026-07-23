@@ -56,6 +56,8 @@ v_revisions_normalized   (view，把上面幾張表JOIN好，網站/研究都從
 
 4. **`concept`欄位 vs `concept_map`表**：`factset_revisions.concept`是抓取當下的原始文字，跟`concept_map`表是完全不同的東西，命名容易搞混，正式分類一律用`concept_map`。
 
+5. **EPS快訊裡也有目標價，只看`event_type='TARGET_PRICE'`會漏掉65%的獨立資訊**：EPS快訊的`new_target`欄位100%有值(是文章內附帶的「預估目標價」)，但沒有對應的`old_target`。檢查發現這些EPS內嵌目標價，有65%前後7天內完全沒有TARGET_PRICE報告可對照——不是重複資料，是被忽略的獨立資訊(例如台積電2023-04~2024-04整年只有EPS快訊、沒有TARGET_PRICE報告，但目標價其實持續在動)。只看TARGET_PRICE事件的目標價序列也證實跳動過快(相鄰變動中位數3.57%，納入EPS內嵌目標價後降到1.40%)。**正式的目標價方向/幅度分析一律用「統一目標價序列」**(`build_unified_target_series.py` / 網站`buildUnifiedTargetSeries()`)，不要只篩`event_type='TARGET_PRICE'`——原始的`direction`/`target_change_pct`欄位是analyst報告自己回報的old/new對照，跟統一序列用「上一個已知觀測點」重新算出來的方向/幅度是兩回事，兩者都保留但不要混用。
+
 ## 「反轉（跑票）」——已測試、已證實無預測力、已從網站移除（2026-07-22）
 
 曾定義：同方向修正連續`streak_len`次、跨度`span_days`天站穩後，被材料性(`|target_change_pct|≥門檻`)夠大的反向修正打破，算一次反轉事件，用意是測「多數分析師還沒轉向時，最早出現的裂縫是否具有領先性」。
@@ -71,4 +73,5 @@ v_revisions_normalized   (view，把上面幾張表JOIN好，網站/研究都從
 - **2026-07-22**：修正事件研究資料被PostgREST 1000筆上限截斷的問題（實際只涵蓋2026上半年，非完整2023-2026），重建後部分結論改變（調降延續力減弱約70%、勝率盈虧比從不利轉為接近持平、電子零組件業調升效應未能複現）。詳見`event_study_full.py`/`event_study_eps.py`的輸出。
 - **2026-07-22**：`concept_map`的`tier`(1/2階層)欄位改為`dimension`(theme/value_chain獨立維度)，因為階層假設被台達電(2308)案例證偽。
 - **2026-07-22**：「反轉（跑票）」訊號經48組門檻校準測試後證實無事件後預測力(唯一顯著數字在事件前，屬落後性質)，從網站移除，詳見上方段落。
+- **2026-07-23**：溫度計算/event study改用「統一目標價序列」(納入EPS內嵌目標價)，樣本從2,989筆增為5,650筆。分析師落後指標更穩健成立，但原本唯一的「調降延續下跌」訊號(post20 t=-2.75顯著)在更完整樣本下**不再顯著**(t=-1.76)——完整資料下事件後20天兩個方向都沒有可交易的延續效應，比先前認知更弱。
 - **2026-07-21**：`industry_name`原始文字解析改為`ticker_industry_official`官方對照表，`v_revisions_normalized.industry_canonical`為正式產業欄位。
