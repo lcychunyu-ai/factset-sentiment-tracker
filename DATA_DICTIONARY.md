@@ -13,6 +13,7 @@ industry_alias           (舊產業文字對照，補ticker_industry_official涵
 concept_map              (概念股分類，獨立參照表，many-to-many)
 
 v_revisions_normalized   (view，把上面幾張表JOIN好，網站/研究都從這個view讀)
+v_unified_target_events  (view，正式的目標價方向/幅度分析從這個view讀，見下方第5點)
 ```
 
 ## factset_revisions（主表）
@@ -56,7 +57,8 @@ v_revisions_normalized   (view，把上面幾張表JOIN好，網站/研究都從
 
 4. **`concept`欄位 vs `concept_map`表**：`factset_revisions.concept`是抓取當下的原始文字，跟`concept_map`表是完全不同的東西，命名容易搞混，正式分類一律用`concept_map`。
 
-5. **EPS快訊裡也有目標價，只看`event_type='TARGET_PRICE'`會漏掉65%的獨立資訊**：EPS快訊的`new_target`欄位100%有值(是文章內附帶的「預估目標價」)，但沒有對應的`old_target`。檢查發現這些EPS內嵌目標價，有65%前後7天內完全沒有TARGET_PRICE報告可對照——不是重複資料，是被忽略的獨立資訊(例如台積電2023-04~2024-04整年只有EPS快訊、沒有TARGET_PRICE報告，但目標價其實持續在動)。只看TARGET_PRICE事件的目標價序列也證實跳動過快(相鄰變動中位數3.57%，納入EPS內嵌目標價後降到1.40%)。**正式的目標價方向/幅度分析一律用「統一目標價序列」**(`build_unified_target_series.py` / 網站`buildUnifiedTargetSeries()`)，不要只篩`event_type='TARGET_PRICE'`——原始的`direction`/`target_change_pct`欄位是analyst報告自己回報的old/new對照，跟統一序列用「上一個已知觀測點」重新算出來的方向/幅度是兩回事，兩者都保留但不要混用。
+5. **EPS快訊裡也有目標價，只看`event_type='TARGET_PRICE'`會漏掉65%的獨立資訊**：EPS快訊的`new_target`欄位100%有值(是文章內附帶的「預估目標價」)，但沒有對應的`old_target`。檢查發現這些EPS內嵌目標價，有65%前後7天內完全沒有TARGET_PRICE報告可對照——不是重複資料，是被忽略的獨立資訊(例如台積電2023-04~2024-04整年只有EPS快訊、沒有TARGET_PRICE報告，但目標價其實持續在動)。只看TARGET_PRICE事件的目標價序列也證實跳動過快(相鄰變動中位數3.57%，納入EPS內嵌目標價後降到1.40%)。
+   **正式的目標價方向/幅度分析一律查`v_unified_target_events`這個view**，不要直接用`factset_revisions`原始的`old_target`欄位(EPS事件該欄位100%是null，用了會安靜漏掉65%資訊，不會報錯，只會默默拿到不完整結果)。這個view把去重+串接的邏輯寫在資料庫端(SQL window function)，不是外部腳本重算的——**設計成「查這個view就是對的」，不用先讀文件才知道要怎麼處理**，`build_unified_target_series.py`只是分頁抓取這個view存檔，不重複算邏輯。
 
 ## 「反轉（跑票）」——已測試、已證實無預測力、已從網站移除（2026-07-22）
 
