@@ -450,6 +450,7 @@ const SUPABASE_URL = 'https://kiiwaojcetxmeycyupvn.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtpaXdhb2pjZXR4bWV5Y3l1cHZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ1Mjk2NzAsImV4cCI6MjEwMDEwNTY3MH0.QPnEenJ8OtgWm1q3zhstinsAzXJAD6bunPp6JhrL4PU';
 const SB_HEADERS = { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` };
 const LIVE_FETCH_DAYS = 90; // 網站只拉最近90天(約一季財報修正週期)，更早的歷史留在資料庫給研究用；研究/回測透過build_event_dataset.py另外抓完整歷史，不受此限制
+const EPS_FETCH_DAYS = 365; // EPS估值(尤其明後年預估)更新頻率比目標價慢，獨立用一年窗口抓，避免個股detail的EPS估值表因為90天窗口而消失(見2026-07-23修正記錄)
 
 async function sbFetch(path, params) {
   const url = new URL(`${SUPABASE_URL}/rest/v1/${path}`);
@@ -461,12 +462,31 @@ async function sbFetch(path, params) {
 
 async function loadData() {
   const cutoff = new Date(Date.now() - LIVE_FETCH_DAYS * 86400000).toISOString().slice(0, 10);
+  const REVISIONS_SELECT = 'id,ticker,company,date,event_type,direction,industry_canonical,old_target,new_target,target_change_pct,target_high,target_low,old_eps,new_eps,highest_eps,lowest_eps,eps_year,analyst_count,rating_bullish,rating_neutral,rating_bearish,event_close_price,price_5d_pct,industry_5d_pct,market_5d_pct,raw_title';
 
   const revisions = await sbFetch('v_revisions_normalized', {
-    select: 'id,ticker,company,date,event_type,direction,industry_canonical,old_target,new_target,target_change_pct,target_high,target_low,old_eps,new_eps,highest_eps,lowest_eps,eps_year,analyst_count,rating_bullish,rating_neutral,rating_bearish,event_close_price,price_5d_pct,industry_5d_pct,market_5d_pct,raw_title',
+    select: REVISIONS_SELECT,
     date: `gte.${cutoff}`,
     order: 'date.desc,id.desc',
     limit: '5000',
+  });
+
+  // EPS估值(尤其明後年預估)更新頻率天生比目標價慢，用跟目標價一樣的90天窗口
+  // 會讓「四個月前才更新、但仍然有效」的EPS估值表整個消失，甚至讓只靠EPS
+  // 覆蓋(沒有TARGET_PRICE報告)的股票直接從清單消失。EPS改用獨立的較長窗口
+  // (EPS_FETCH_DAYS)，只補進個股detail頁用得到的EPS歷史，不影響溫度計算/
+  // 熱力排行(那些維持只看LIVE_FETCH_DAYS，不因此變吵)。
+  const epsCutoff = new Date(Date.now() - EPS_FETCH_DAYS * 86400000).toISOString().slice(0, 10);
+  const wideEps = await sbFetch('v_revisions_normalized', {
+    select: REVISIONS_SELECT,
+    event_type: 'eq.EPS',
+    date: `gte.${epsCutoff}`,
+    order: 'date.desc,id.desc',
+    limit: '5000',
+  });
+  const seenIds = new Set(revisions.map(r => r.id));
+  wideEps.forEach(r => {
+    if (!seenIds.has(r.id)) { r._wideOnly = true; revisions.push(r); seenIds.add(r.id); }
   });
 
   const epsIds = revisions.filter(r => r.event_type === 'EPS').map(r => r.id);
@@ -512,7 +532,9 @@ const pinnedTickers = new Set();
 // 注意：這幾個變數依賴DATA，DATA是loadData()非同步載入的，不能在頂層當場算，要等init()裡資料到位後呼叫initDateGlobals()才賦值
 let ALL_DATES, MAX_DATE, MIN_DATE, ALL_SPAN_DAYS, RANGE_LABEL, RANGE_DAYS;
 function initDateGlobals() {
-  ALL_DATES = DATA.revisions.map(r => r.date);
+  // 只用主要的90天窗口資料算日期範圍，排除EPS_FETCH_DAYS額外補進來的較舊EPS資料
+  // (那些只是給個股detail頁用的，不該把「90d」這個窗口概念拉長成一年)
+  ALL_DATES = DATA.revisions.filter(r => !r._wideOnly).map(r => r.date);
   MAX_DATE = ALL_DATES.reduce((a, b) => (a > b ? a : b));
   MIN_DATE = ALL_DATES.reduce((a, b) => (a < b ? a : b));
   ALL_SPAN_DAYS = Math.round((new Date(MAX_DATE) - new Date(MIN_DATE)) / 86400000) + 1;
