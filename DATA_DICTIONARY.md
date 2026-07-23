@@ -14,6 +14,9 @@ concept_map              (概念股分類，獨立參照表，many-to-many)
 
 v_revisions_normalized   (view，把上面幾張表JOIN好，網站/研究都從這個view讀)
 v_unified_target_events  (view，正式的目標價方向/幅度分析從這個view讀，見下方第5點)
+v_eps_only_target_events (view，只用EPS內嵌目標價串成的序列，跟v_unified_target_events
+                           同一套邏輯，差在資料來源範圍，用來做三方比較/驗證EPS通道本身準不準)
+v_data_dictionary        (view，整個資料庫的自我說明文件，下載資料前先查這個)
 ```
 
 ## factset_revisions（主表）
@@ -69,6 +72,18 @@ v_unified_target_events  (view，正式的目標價方向/幅度分析從這個v
 **結果**：48組全部不顯著(事件後窗口)。唯一出現的顯著數字(streak≥5組，`car_pre_5` t=-2.83)是**事件前**而非事件後——代表就算是站穩趨勢後才反轉的案例，價格變動也是在反轉被記錄「之前」就已經顯著發生，反轉本身沒有逃脫「分析師整體是落後指標」這個更早已驗證的規律。網格結果存在`factset_data/reversal_calibration_grid.csv`。
 
 **結論**：反轉徽章/排序選項已從`index.html`移除，網站footer改為明講「已測試、無預測力」，避免展示一個驗證是雜訊的東西。此定義+驗證過程保留在這裡跟`reversal_signal_calibration.py`作為研究紀錄，不代表這條路線可以再直接拿來用。
+
+## 目標價三方來源比較（純TARGET_PRICE / 純EPS內嵌 / 統一序列，2026-07-23）
+
+用`event_study_full.py`把三種目標價資料來源分開跑，確認EPS內嵌目標價是不是真訊號、合併是否合理：
+
+| | 純TARGET_PRICE | 純EPS內嵌目標價 | 統一序列 |
+|---|---|---|---|
+| 事件數 | 2,989 | 4,100 | 5,650 |
+| 落後指標(pre5) | UP t=10.93 / DOWN t=-5.47 | UP t=7.86 / DOWN t=-4.29 | UP t=10.50 / DOWN t=-4.88 |
+| 調降延續力(post20) | **t=-2.75(顯著)** | t=-0.29(無效果) | t=-1.76(不顯著) |
+
+**發現**：EPS內嵌目標價本身是真訊號(單獨測落後指標依然顯著)，合併成統一序列不會稀釋核心的落後指標結論。但「調降後延續下跌」這個效應幾乎完全來自TARGET_PRICE事件，EPS內嵌目標價完全沒有這個效應——merge後被稀釋成不顯著。提示「是否為專門發布的目標價報告」可能是有意義的區分變數，之後設計策略時值得保留、不要在merge時抹平這個差異。
 
 ## 版本記錄（影響資料解讀的重大變更）
 
