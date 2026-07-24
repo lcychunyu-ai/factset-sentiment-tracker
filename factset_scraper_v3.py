@@ -30,6 +30,9 @@ TZ_TW = timezone(timedelta(hours=8))
 
 TITLE_RE = re.compile(r"Factset\s*最新調查[：:]\s*(?P<name>[^\(]+)\((?P<code>\d{4,6})-TW\)")
 EPS_TITLE_RE = re.compile(r"EPS預估(?P<dir>上修|下修)至(?P<eps_new>-?[\d.]+)元，預估目標價為(?P<target>-?[\d.]+)元")
+# 2023年文章格式：中位數表格欄位不是"新值(舊值)"括號格式，舊值改寫在內文開頭一句話裡，
+# 例如「中位數由21.01元下修至20.76元」。2026-07-24發現，之前誤判成2023年原文沒寫舊值。
+EPS_OLD_MEDIAN_RE = re.compile(r"中位數由(-?[\d.]+)元(?:上修|下修)至(-?[\d.]+)元")
 TP_TITLE_RE = re.compile(r"目標價調(?P<dir>升|降)至(?P<target>-?[\d.]+)元，幅度約(?P<pct>-?[\d.]+)%")
 RATING_RE = re.compile(r"積極樂觀(?P<bull>\d+)位、保持中立(?P<neutral>\d+)位、保守悲觀(?P<bear>\d+)位")
 PRICE_RE = re.compile(
@@ -191,6 +194,10 @@ def parse_article(item):
             new_h, _ = split_new_old(eps_table.get("最高值", [""])[0])
             new_l, _ = split_new_old(eps_table.get("最低值", [""])[0])
             new_m, old_m = split_new_old(eps_table.get("中位數", [""])[0])
+            if old_m is None:
+                m_old_median = EPS_OLD_MEDIAN_RE.search(full_text)
+                if m_old_median:
+                    old_m = float(m_old_median.group(1))
             row["highest_eps"], row["lowest_eps"] = new_h, new_l
             row["new_eps"], row["old_eps"] = new_m, old_m
             row["estimates"].extend(table_to_estimates(eps_years, eps_table, "EPS"))
