@@ -5,6 +5,9 @@
 
 方法：對每個事件，比較估計窗[-250,-30]的AR標準差(平常的波動基準) vs
 事件窗[+1,+20]的AR標準差(事件後)，算比值，檢定比值的分布是否顯著>1。
+
+2026-07-24更新：產業基準改市值加權(原等權重)+樣本數<3檔退化成大盤(原<1檔)，
+理由同event_study_full.py同一天的更新記錄，兩版結果差異在誤差範圍內。
 """
 import json
 import numpy as np
@@ -13,6 +16,7 @@ import pandas as pd
 events = [e for e in json.load(open("factset_data/events_unified_target_full.json")) if e.get("direction") in ("UP", "DOWN")]
 prices_raw = json.load(open("factset_data/prices_full.json"))
 taiex_raw = json.load(open("factset_data/taiex_full.json"))
+shares = json.load(open("factset_data/shares_outstanding.json"))
 
 taiex = pd.Series(taiex_raw).sort_index()
 taiex.index = pd.to_datetime(taiex.index)
@@ -20,9 +24,11 @@ taiex_ret = taiex.pct_change().dropna()
 common_all = taiex_ret.index
 
 stock_ret = {}
+stock_price = {}
 for t, d in prices_raw.items():
     ser = pd.Series(d["prices"]).sort_index()
     ser.index = pd.to_datetime(ser.index)
+    stock_price[t] = ser.reindex(common_all)
     stock_ret[t] = ser.pct_change().dropna().reindex(common_all)
 
 ticker_industry = {e["ticker"]: e["industry_canonical"] for e in events}
@@ -30,9 +36,11 @@ industry_tickers = {}
 for t, ind in ticker_industry.items():
     industry_tickers.setdefault(ind, []).append(t)
 
+MIN_INDUSTRY_MEMBERS = 3
+
 def industry_benchmark(industry, exclude_ticker):
     members = [t for t in industry_tickers.get(industry, []) if t != exclude_ticker and t in stock_ret]
-    if not members:
+    if len(members) < MIN_INDUSTRY_MEMBERS:
         return None
     return pd.concat([stock_ret[t] for t in members], axis=1).mean(axis=1, skipna=True)
 

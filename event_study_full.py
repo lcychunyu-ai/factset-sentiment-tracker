@@ -8,6 +8,13 @@ Event Study：目標價修正事件版本
 EPS內嵌目標價前後7天內完全沒有TARGET_PRICE報告可對照，是被忽略的獨立資訊。
 純TARGET_PRICE版本(events_target_price_full.json)保留作對照，兩者都跑，方便比較差異。
 
+2026-07-24更新：產業基準改成市值加權(原本是等權重)，且產業樣本數<3檔時退化成
+只用大盤(原本是<1檔才退化，門檻太寬鬆，2檔的"平均"統計上不穩定)。市值用
+shares_outstanding.json(yfinance目前股數，視為近似固定)×每日股價估算，
+權重用前一天市值(shift(1))避免用當天報酬加權當天報酬的內生性問題。
+兩種權重法實測結果差異在誤差範圍內(<0.5個百分點)，市值加權在方法論上更貼近
+「產業真實共同波動」，採用為新標準。
+
 方法：市場模型 alpha+beta_mkt*R_mkt+beta_ind*R_ind，估計窗[-250,-30]交易日，
 事件窗[-10,+20]交易日，AR/CAR，date-cluster標準誤。
 """
@@ -17,6 +24,7 @@ import pandas as pd
 
 prices_raw = json.load(open("factset_data/prices_full.json"))
 taiex_raw = json.load(open("factset_data/taiex_full.json"))
+shares = json.load(open("factset_data/shares_outstanding.json"))
 
 taiex = pd.Series(taiex_raw).sort_index()
 taiex.index = pd.to_datetime(taiex.index)
@@ -24,18 +32,25 @@ taiex_ret = taiex.pct_change().dropna()
 common_all = taiex_ret.index
 
 stock_ret = {}
+stock_price = {}
 for t, d in prices_raw.items():
     ser = pd.Series(d["prices"]).sort_index()
     ser.index = pd.to_datetime(ser.index)
+    stock_price[t] = ser.reindex(common_all)
     stock_ret[t] = ser.pct_change().dropna().reindex(common_all)
+
+MIN_INDUSTRY_MEMBERS = 3
 
 
 def industry_benchmark_leave_one_out(industry_tickers, industry, exclude_ticker):
     members = [t for t in industry_tickers.get(industry, []) if t != exclude_ticker and t in stock_ret]
-    if not members:
+    if len(members) < MIN_INDUSTRY_MEMBERS:
         return None
-    mat = pd.concat([stock_ret[t] for t in members], axis=1)
-    return mat.mean(axis=1, skipna=True)
+    rets = pd.concat([stock_ret[t] for t in members], axis=1, keys=members)
+    caps = pd.concat([stock_price[t] * shares.get(t, 0) for t in members], axis=1, keys=members)
+    caps = caps.shift(1)  # 用前一天市值當權重，避免用當天報酬加權當天報酬的內生性
+    w = caps.div(caps.sum(axis=1), axis=0)
+    return (rets * w).sum(axis=1, min_count=1)
 
 
 def clustered_ttest(sub, col):
